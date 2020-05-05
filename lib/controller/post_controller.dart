@@ -129,14 +129,13 @@ class _PostListState extends State<PostList> with AutomaticKeepAliveClientMixin 
 
     _errorChild = GestureDetector(
       onTap: _refreshData,
-      child: Container(
-        child: Center(
-          child: Text(
-            '加载失败，轻触重试',
-            style: TextStyle(
-              fontSize: suSetSp(30.0),
-              color: currentThemeColor,
-            ),
+      behavior: HitTestBehavior.opaque,
+      child: Center(
+        child: Text(
+          '加载失败，轻触重试',
+          style: TextStyle(
+            fontSize: suSetSp(30.0),
+            color: currentThemeColor,
           ),
         ),
       ),
@@ -149,42 +148,53 @@ class _PostListState extends State<PostList> with AutomaticKeepAliveClientMixin 
     if (!_isLoading && _canLoadMore) {
       _isLoading = true;
     }
-    final result = (await PostAPI.getPostList(
-      widget.postController.postType,
-      widget.postController.isFollowed,
-      true,
-      _lastValue,
-      additionAttrs: widget.postController.additionAttrs,
-    ))
-        .data;
+    try {
+      final result = (await PostAPI.getPostList(
+        widget.postController.postType,
+        widget.postController.isFollowed,
+        true,
+        _lastValue,
+        additionAttrs: widget.postController.additionAttrs,
+      ))
+          .data;
 
-    List<Post> postList = [];
-    List _topics = result['topics'];
-    int _total = int.parse(result['total'].toString());
-    int _count = int.parse(result['count'].toString());
+      final List<Post> postList = [];
+      final List _topics = result['topics'];
+      final int _total = '${result['total']}'.toInt();
+      final int _count = '${result['count']}'.toInt();
 
-    for (var postData in _topics) {
-      if (!UserAPI.blacklist.contains(jsonEncode({
-        'uid': postData['topic']['user']['uid'].toString(),
-        'username': postData['topic']['user']['nickname'],
-      }))) {
-        postList.add(Post.fromJson(postData['topic']));
-        _idList.add(
-          postData['id'] is String ? int.parse(postData['id']) : postData['id'],
-        );
+      for (final postData in _topics) {
+        final Map<String, dynamic> topic = postData['topic'];
+        if (postData['topic'] != null) {
+          final Map<String, dynamic> user = postData['topic']['user'];
+          final String encodedUser = jsonEncode({
+            'uid': user['uid'].toString(),
+            'username': user['nickname'],
+          });
+          if (!UserAPI.blacklist.contains(encodedUser)) {
+            postList.add(Post.fromJson(topic));
+            _idList.add('${postData['id']}'.toInt());
+          }
+        }
       }
-    }
-    _postList.addAll(postList);
+      _postList.addAll(postList);
 
-    _isLoading = false;
-    _canLoadMore = _idList.length < _total && _count != 0;
-    _lastValue = _idList.isEmpty ? 0 : widget.postController.lastValue(_idList.last);
-    if (mounted) setState(() {});
+      _canLoadMore = _idList.length < _total && _count != 0;
+      _lastValue = _idList.isEmpty ? 0 : widget.postController.lastValue(_idList.last);
+    } catch (e) {
+      trueDebugPrint('Error when fetching data for post: $e');
+    } finally {
+      _isLoading = false;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<Null> _refreshData({bool needLoader = false}) async {
     if (!_isLoading) {
       _isLoading = true;
+      if (mounted) {
+        setState(() {});
+      }
     } else {
       return;
     }
@@ -201,11 +211,11 @@ class _PostListState extends State<PostList> with AutomaticKeepAliveClientMixin 
       ))
           .data;
 
-      List<Post> postList = [];
-      List<int> idList = [];
-      List _topics = result['topics'] ?? result['data'];
-      int _total = int.parse(result['total'].toString());
-      int _count = int.parse(result['count'].toString());
+      final List<Post> postList = [];
+      final List<int> idList = [];
+      final List<dynamic> _topics = result['topics'] ?? result['data'];
+      final int _total = '${result['total']}'.toInt();
+      final int _count = '${result['count']}'.toInt();
 
       for (var postData in _topics) {
         if (postData['topic'] != null && postData != '') {
@@ -235,10 +245,10 @@ class _PostListState extends State<PostList> with AutomaticKeepAliveClientMixin 
     } catch (e) {
       error = true;
       trueDebugPrint('Failed when refresh post list: $e');
+    } finally {
+      _isLoading = false;
+      if (mounted) setState(() {});
     }
-
-    _isLoading = false;
-    if (mounted) setState(() {});
   }
 
   @mustCallSuper
